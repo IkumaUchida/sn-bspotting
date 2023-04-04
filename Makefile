@@ -52,3 +52,19 @@ lint:
 test-all:
 	$(MAKE) lint
 	$(MAKE) test
+
+
+.PHONY: docker-run-conda
+docker-run-conda:
+
+	docker run \
+	--name bspotting_cuconda \
+	--gpus all \
+	-d \
+	-u $(id -u):$(id -g) \
+	--shm-size=516G \
+	-it \
+	-v $(PWD):/workspace \
+	jptman/cuconda:v1 bash
+
+	docker attach bspotting_cuconda

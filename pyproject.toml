@@ -27,6 +27,9 @@ classifiers = [
 [tool.poetry.dependencies]
 python = "^3.8"
 soccernet = "^0.1.51"
+torch = "^2.0.0"
+torchaudio = "^2.0.1"
+torchvision = "^0.15.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
