@@ -1,0 +1,14 @@
+data/*
+models/*
+outputs/*
+Visualization/output/*
+x_ignore/*
+
+__pycache__
+.coverage
+.mypy_cache
+.pytest_cache
+.venv
+__pycache__
+.vscode
+work_dir
