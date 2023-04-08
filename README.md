@@ -101,4 +101,4 @@ To visualize the predictions, use `python3 Visualization/visualize.py --input_vi
 
 The following video will be stored in `<output_video_dir>`.
 
-![demo](./sn-bspotting/src/output_video_under0_60.gif)
+![demo](https://github.com/IkumaUchida/sn-bspotting/blob/master/src/output_video_under0_60.gif)
