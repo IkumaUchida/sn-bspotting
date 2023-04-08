@@ -98,3 +98,6 @@ To visualize the predictions, use `python3 Visualization/visualize.py --input_vi
 * `<start_time>`: start time of the video(e.g., 30)
 * `<end_time>`: end time of the video(e.g., 60)
 
+The following video will be stored in `<output_video_dir>`.
+
+![demo](./sn-bspotting/src/output_video_under0_60.gif)
