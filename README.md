@@ -15,9 +15,9 @@ E2E-spot is used as the baseline method. ([paper](https://arxiv.org/pdf/2207.102
 You can implement the following flow from learning to evaluation.
 
 # Environment
-The code is tested in Linux (Ubuntu 16.04 and 20.04) with the dependency versions in `requirements.txt`. Similar environments are likely to work also but YMMV.
+The code is tested in Linux (Ubuntu 20.04) with the dependency versions in `requirements.txt`. Similar environments are likely to work also but YMMV.
 
-Note: If you want to build an environment with Docker and Poetryni, it is preferable to refer to [cvpaperchallenge/Ascender repository](https://github.com/cvpaperchallenge/Ascender).
+Note: If you want to build an environment with Docker and Poetry, it is preferable to refer to [cvpaperchallenge/Ascender repository](https://github.com/cvpaperchallenge/Ascender).
 
 # usage
 
