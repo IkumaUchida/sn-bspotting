@@ -89,6 +89,38 @@ Predictions are formatted similarly to the labels:
 ]
 ```
 
+### Baseline results
+```
+Metric: loose
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         86.64      86.64         0
+DRIVE        88.12      88.12         0
+Average mAP  87.38      87.38         0
+
+Metric: tight
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         75.6       75.6          0
+DRIVE        78.16      78.16         0
+Average mAP  76.88      76.88         0
+
+Metric: at1
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         74.85      74.85         0
+DRIVE        69.64      69.64         0
+Average mAP  72.24      72.24         0
+
+Metric: at2
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         75.7       75.7          0
+DRIVE        77.8       77.8          0
+Average mAP  76.75      76.75         0
+
+```
+
 ## Visualization
 To visualize the predictions, use `python3 Visualization/visualize.py --input_video <input_video_file> --input_json <input_json_file> --output_video_dir <output_video_dir> --output_video_name <output_video_name> --start <start_time> --end <end_time>` from root dir.
 
