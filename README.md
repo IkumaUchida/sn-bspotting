@@ -119,6 +119,26 @@ PASS         75.7       75.7          0
 DRIVE        77.8       77.8          0
 Average mAP  76.75      76.75         0
 
+Metric: at3
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         75.64      75.64         0
+DRIVE        79.9       79.9          0
+Average mAP  77.77      77.77         0
+
+Metric: at4
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         75.78      75.78         0
+DRIVE        79.74      79.74         0
+Average mAP  77.76      77.76         0
+
+Metric: at5
+               Any    Visible    Unseen
+-----------  -----  ---------  --------
+PASS         75.67      75.67         0
+DRIVE        80.75      80.75         0
+Average mAP  78.21      78.21         0
 ```
 
 ## Visualization
