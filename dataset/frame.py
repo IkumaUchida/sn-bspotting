@@ -9,14 +9,36 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 import torchvision
 import torchvision.transforms as transforms
+import numpy as np
+from torchvision.transforms import RandomAffine, RandomPerspective
 
 from util.io import load_json
 from .transform import RandomGaussianNoise, RandomHorizontalFlipFLow, \
     RandomOffsetFlow, SeedableRandomSquareCrop, ThreeCrop
 
 
+
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
+
+class MixUpDataset(Dataset):
+    def __init__(self, dataset, alpha=0.4):
+        self.dataset = dataset
+        self.alpha = alpha
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        data1, label1 = self.dataset[idx]
+        idx2 = torch.randint(0, len(self.dataset), size=(1,)).item()
+        data2, label2 = self.dataset[idx2]
+
+        lam = np.random.beta(self.alpha, self.alpha)
+        data = lam * data1 + (1 - lam) * data2
+        label = lam * label1 + (1 - lam) * label2
+
+        return data, label
 
 
 class FrameReader:
@@ -158,7 +180,6 @@ def _load_frame_deferred(gpu_transform, batch, device):
                     frame_mix[i].to(device))
     return frame
 
-
 def _get_img_transforms(
         is_eval,
         crop_dim,
@@ -186,6 +207,12 @@ def _get_img_transforms(
             img_transforms.append(
                 transforms.RandomHorizontalFlip())
 
+            # Add RandomAffine
+            img_transforms.append(RandomAffine(degrees=(-10, 10), scale=(0.9, 1.1)))
+
+            # Add RandomPerspective
+            img_transforms.append(RandomPerspective(distortion_scale=0.2, p=0.5))
+
             if not defer_transform:
                 img_transforms.extend([
                     # Jittering separately is faster (low variance)
@@ -204,14 +231,6 @@ def _get_img_transforms(
                         nn.ModuleList([
                             transforms.ColorJitter(contrast=(0.7, 1.2))
                         ]), p=0.25),
-
-                    # Jittering together is slower (high variance)
-                    # transforms.RandomApply(
-                    #     nn.ModuleList([
-                    #         transforms.ColorJitter(
-                    #             brightness=(0.7, 1.2), contrast=(0.7, 1.2),
-                    #             saturation=(0.7, 1.2), hue=0.2)
-                    #     ]), p=0.8),
 
                     transforms.RandomApply(
                         nn.ModuleList([transforms.GaussianBlur(5)]), p=0.25)
@@ -277,7 +296,6 @@ IGNORED_NOT_SHOWN_FLAG = False
 
 
 class ActionSpotDataset(Dataset):
-
     def __init__(
             self,
             classes,                    # dict of class names to idx
@@ -393,7 +411,6 @@ class ActionSpotDataset(Dataset):
         for event in video_meta['events']:
             event_frame = event['frame']
 
-            # Index of event in label array
             label_idx = (event_frame - base_idx) // self._stride
             if (label_idx >= -self._dilate_len
                 and label_idx < self._clip_len + self._dilate_len
@@ -442,6 +459,7 @@ class ActionSpotDataset(Dataset):
         _print_info_helper(self._src_file, self._labels)
 
 
+
 class ActionSpotVideoDataset(Dataset):
 
     def __init__(
@@ -469,8 +487,6 @@ class ActionSpotVideoDataset(Dataset):
         crop_transform, img_transform = _get_img_transforms(
             is_eval=True, crop_dim=crop_dim, modality=modality, same_transform=True, multi_crop=multi_crop)
 
-        # No need to enforce same_transform since the transforms are
-        # deterministic
         self._frame_reader = FrameReader(
             frame_dir, modality, crop_transform, img_transform, False)
 
@@ -484,7 +500,6 @@ class ActionSpotVideoDataset(Dataset):
                 -pad_len * self._stride,
                 max(0, l['num_frames'] - (overlap_len * stride)
                         * int(skip_partial_end)), \
-                # Need to ensure that all clips have at least one frame
                 (clip_len - overlap_len) * self._stride
             ):
                 has_clip = True
@@ -546,7 +561,7 @@ class ActionSpotVideoDataset(Dataset):
                 for e in x_copy['events']:
                     e['frame'] //= self._stride
                 labels.append(x_copy)
-            return labels
+        return labels
 
     def print_info(self):
         num_frames = sum([x['num_frames'] for x in self._labels])
