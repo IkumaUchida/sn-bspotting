@@ -458,8 +458,6 @@ class ActionSpotDataset(Dataset):
     def print_info(self):
         _print_info_helper(self._src_file, self._labels)
 
-
-
 class ActionSpotVideoDataset(Dataset):
 
     def __init__(
