@@ -68,7 +68,7 @@ def get_args():
             # From timm
             'convnextt',
             'convnextt_tsm',
-            'convnextt_gsm'
+            'convnextt_gsm',
 
             # Add EfficientNet options
             'efficientnet_b0',
@@ -79,6 +79,11 @@ def get_args():
             'efficientnet_b5',
             'efficientnet_b6',
             'efficientnet_b7',
+
+            # Add EfficientNet v2 options
+            'efficientnetv2_s',
+            'efficientnetv2_m',
+            'efficientnetv2_l',
         ], help='CNN architecture for feature extraction')
     parser.add_argument(
         '-t', '--temporal_arch', type=str, default='gru',
@@ -191,6 +196,18 @@ class E2EModel(BaseRGBModel):
 
             # Add EfficientNet implementation
             elif feature_arch.startswith('efficientnet'):
+                features = timm.create_model(feature_arch, pretrained=is_rgb)
+                feat_dim = features.classifier.in_features
+                features.classifier = nn.Identity()
+                if not is_rgb:
+                    features.conv_stem = nn.Conv2d(
+                        in_channels, features.conv_stem.out_channels,
+                        kernel_size=features.conv_stem.kernel_size,
+                        stride=features.conv_stem.stride,
+                        padding=features.conv_stem.padding,
+                        bias=False)
+            
+            elif feature_arch.startswith('efficientnetv2'):
                 features = timm.create_model(feature_arch, pretrained=is_rgb)
                 feat_dim = features.classifier.in_features
                 features.classifier = nn.Identity()
