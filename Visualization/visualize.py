@@ -129,3 +129,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.input_video, args.input_json, args.output_video_dir, args.output_video_name, args.start, args.end)
+
+
+
+
+# poetry run python3 visualize.py --input_video "./data/soccernet_ball/spotting-ball-2023/england_efl/2019-2020/2019-10-01 - Reading - Fulham/1_720p.mkv" --input_json "outputs/7/pred/england_efl/2019-2020/2019-10-01 - Reading - Fulham/results_spotting.json" --output_video_dir "Visualization/output/" --output_video_name "output_video_pred_7.mp4" --start 0 --end 60
