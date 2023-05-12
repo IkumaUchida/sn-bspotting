@@ -9,7 +9,7 @@ E2E-spot is used as the baseline method. ([paper](https://arxiv.org/pdf/2207.102
 
 
 
-# [4/6 updated] Check the baseline operation
+# [5/11 updated] Check the baseline operation
 ---
 
 You can implement the following flow from learning to evaluation.
