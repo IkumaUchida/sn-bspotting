@@ -69,6 +69,16 @@ def get_args():
             'convnextt',
             'convnextt_tsm',
             'convnextt_gsm'
+
+            # Add EfficientNet options
+            'efficientnet_b0',
+            'efficientnet_b1',
+            'efficientnet_b2',
+            'efficientnet_b3',
+            'efficientnet_b4',
+            'efficientnet_b5',
+            'efficientnet_b6',
+            'efficientnet_b7',
         ], help='CNN architecture for feature extraction')
     parser.add_argument(
         '-t', '--temporal_arch', type=str, default='gru',
@@ -106,6 +116,29 @@ def get_args():
 
     parser.add_argument('-mgpu', '--gpu_parallel', action='store_true')
     return parser.parse_args()
+
+
+class FocalLoss(nn.Module):
+    def __init__(self, alpha=1, gamma=2, logits=False, reduce=True):
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.logits = logits
+        self.reduce = reduce
+
+    def forward(self, inputs, targets):
+        if self.logits:
+            BCE_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduce=False)
+        else:
+            BCE_loss = nn.functional.binary_cross_entropy(inputs, targets, reduce=False)
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
+
+        if self.reduce:
+            return torch.mean(F_loss)
+        else:
+            return F_loss
+        
 
 
 class E2EModel(BaseRGBModel):
@@ -155,6 +188,19 @@ class E2EModel(BaseRGBModel):
                 if not is_rgb:
                     features.stem[0] = nn.Conv2d(
                         in_channels, 96, kernel_size=4, stride=4)
+
+            # Add EfficientNet implementation
+            elif feature_arch.startswith('efficientnet'):
+                features = timm.create_model(feature_arch, pretrained=is_rgb)
+                feat_dim = features.classifier.in_features
+                features.classifier = nn.Identity()
+                if not is_rgb:
+                    features.conv_stem = nn.Conv2d(
+                        in_channels, features.conv_stem.out_channels,
+                        kernel_size=features.conv_stem.kernel_size,
+                        stride=features.conv_stem.stride,
+                        padding=features.conv_stem.padding,
+                        bias=False)
 
             else:
                 raise NotImplementedError(feature_arch)
@@ -250,6 +296,9 @@ class E2EModel(BaseRGBModel):
         if fg_weight != 1:
             ce_kwargs['weight'] = torch.FloatTensor(
                 [1] + [fg_weight] * (self._num_classes - 1)).to(self.device)
+            
+        # FocalLossのインスタンスを作成
+        focal_loss = FocalLoss(alpha=1, gamma=2, logits=True, reduce=True).to(self.device)
 
         epoch_loss = 0.
         with torch.no_grad() if optimizer is None else nullcontext():
@@ -269,9 +318,8 @@ class E2EModel(BaseRGBModel):
                         pred = pred.unsqueeze(0)
 
                     for i in range(pred.shape[0]):
-                        loss += F.cross_entropy(
-                            pred[i].reshape(-1, self._num_classes), label,
-                            **ce_kwargs)
+                        loss += focal_loss(
+                            pred[i].reshape(-1, self._num_classes), label)
 
                 if optimizer is not None:
                     step(optimizer, scaler, loss / acc_grad_iter,

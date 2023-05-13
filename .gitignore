@@ -1,6 +1,9 @@
 data/*
 models/*
 outputs/*
+Visualization/output/*
+x_ignore/*
+
 __pycache__
 .coverage
 .mypy_cache
