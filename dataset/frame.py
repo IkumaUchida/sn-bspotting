@@ -389,7 +389,7 @@ class ActionSpotDataset(Dataset):
         else:
             video_meta, base_idx = self._sample_uniform()
 
-        labels = np.zeros(self._clip_len, np.int64)
+        labels = np.zeros(self._clip_len, int)
         for event in video_meta['events']:
             event_frame = event['frame']
 
@@ -512,7 +512,7 @@ class ActionSpotVideoDataset(Dataset):
         num_labels = num_frames // self._stride
         if num_frames % self._stride != 0:
             num_labels += 1
-        labels = np.zeros(num_labels, np.int)
+        labels = np.zeros(num_labels, int)
         for event in meta['events']:
             frame = event['frame']
             if frame < num_frames:
