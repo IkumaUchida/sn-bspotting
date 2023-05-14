@@ -68,3 +68,33 @@ docker-run-conda:
 	jptman/cuconda:v1 bash
 
 	docker attach bspotting_cuconda
+
+
+.PHONY: docker
+docker:
+	docker build -t ikumauchida/sn-bspotting:latest . 
+	docker run -t ikumauchida/sn-bspotting:latest echo "ikumauchida/sn-bspotting done"
+# docker run --platform linux/amd64 -t atomscott/soccertrack:latest echo "atomscott/soccertrack done"
+# if cpu dont user --gpus all
+# if m1 mac add --platform linux/amd64 before the image name
+
+.PHONY: docker-cpu
+docker-check-gpu:
+	docker run --gpus all -t atomscott/soccertrack:latest  nvidia-smi
+
+
+.PHONY: docker-push
+docker-push:
+	docker login
+	docker push atomscott/soccertrack:latest
+
+.PHONY: docker-run
+docker-run:
+	docker run --rm --gpus all -t -it -v $(PWD):/workspace ikumauchida/sn-bspotting:latest bash
+
+#################################################################################
+# Singularity                                                     #
+#################################################################################
+.PHONY: singularity-pull
+singularity-pull:
+	singularity pull docker://atomscott/soccertrack:latest

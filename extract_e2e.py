@@ -75,11 +75,12 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
 
     os.makedirs(model_dir, exist_ok=True)
 
+
     with torch.no_grad():
         all_gru_states = []
         prev_video_name = split_data[0]['video']  # Initialize with the name of the first video
 
-        for video in tqdm(split_data):
+        for _, video in enumerate(tqdm(split_data)):
             inputs = video['frame'].to(model.device)
 
             # Check if the video name has changed
@@ -95,9 +96,9 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
                 prev_video_name = video['video']
 
             if extract:
-                gru_states_perframe, _ = model.predict_with_gru_states(inputs)# Get GRU hidden states
+                gru_states_perframe, _ = model.predict_with_gru_states(inputs)  # Get GRU hidden states
                 gru_states_perframe = np.squeeze(gru_states_perframe, axis=0)  # Remove the first dimension
-                all_gru_states.extend(gru_states_perframe)# Add the GRU states to the list
+                all_gru_states.extend(gru_states_perframe)  # Add the GRU states to the list
             else:
                 _ = model.predict(inputs)
 
