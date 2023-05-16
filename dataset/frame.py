@@ -473,7 +473,8 @@ class ActionSpotVideoDataset(Dataset):
             pad_len=DEFAULT_PAD_LEN,
             flip=False,
             multi_crop=False,
-            skip_partial_end=True
+            skip_partial_end=True,
+            extract_features=False
     ):
         self._src_file = label_file
         self._labels = load_json(label_file)
@@ -481,6 +482,7 @@ class ActionSpotVideoDataset(Dataset):
         self._video_idxs = {x['video']: i for i, x in enumerate(self._labels)}
         self._clip_len = clip_len
         self._stride = stride
+        self._extract_features = extract_features
 
         crop_transform, img_transform = _get_img_transforms(
             is_eval=True, crop_dim=crop_dim, modality=modality, same_transform=True, multi_crop=multi_crop)
@@ -492,6 +494,9 @@ class ActionSpotVideoDataset(Dataset):
         self._multi_crop = multi_crop
 
         self._clips = []
+
+        pad_len = 0 if extract_features else pad_len
+
         for l in self._labels:
             has_clip = False
             for i in range(
@@ -508,16 +513,25 @@ class ActionSpotVideoDataset(Dataset):
         return len(self._clips)
 
     def __getitem__(self, idx):
+        pad = False if self._extract_features else True
         video_name, start = self._clips[idx]
+        
+        # Get a list of all files in the frame_dir
+        all_files = os.listdir(os.path.join(self._frame_reader._frame_dir, video_name))
+        # Filter the list to include only .jpg or .png files
+        image_files = [f for f in all_files if f.endswith('.jpg') or f.endswith('.png')]
+        # Count the number of image files
+        frame_count = len(image_files)
+        
         frames = self._frame_reader.load_frames(
-            video_name, start, start + self._clip_len * self._stride, pad=True,
+            video_name, start, start + self._clip_len * self._stride, pad=pad,
             stride=self._stride)
 
         if self._flip:
             frames = torch.stack((frames, frames.flip(-1)), dim=0)
 
         return {'video': video_name, 'start': start // self._stride,
-                'frame': frames}
+                'frame': frames,  'frame_count': frame_count}
 
     def get_labels(self, video):
         meta = self._labels[self._video_idxs[video]]

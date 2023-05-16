@@ -71,7 +71,7 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
     split_data = ActionSpotVideoDataset(
         classes, split_path, frame_dir, config['modality'], config['clip_len'],
         overlap_len=0 if no_overlap else config['clip_len'] // 2,
-        crop_dim=config['crop_dim'], skip_partial_end=False)
+        crop_dim=config['crop_dim'], skip_partial_end=False, extract_features=extract)
 
     os.makedirs(model_dir, exist_ok=True)
 
@@ -82,12 +82,13 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
 
         for _, video in enumerate(tqdm(split_data)):
             inputs = video['frame'].to(model.device)
+            true_frame_count = video['frame_count']
+            # print(video['frame_count'])
 
             # Check if the video name has changed
             if video['video'] != prev_video_name:
                 # Save the GRU states for the previous video
-                video_name_safe = re.sub(r'\W+', '_', prev_video_name)
-                output_path = os.path.join(output_dir, f'{video_name_safe}_gru_states.npy')
+                output_path = os.path.join(output_dir, f'{prev_video_name}.npy')
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 np.save(output_path, np.array(all_gru_states))
                 print(f'Saved GRU states for {prev_video_name} to {output_path}')
@@ -97,14 +98,16 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
 
             if extract:
                 gru_states_perframe, _ = model.predict_with_gru_states(inputs)  # Get GRU hidden states
-                gru_states_perframe = np.squeeze(gru_states_perframe, axis=0)  # Remove the first dimension
+                gru_states_perframe = np.squeeze(gru_states_perframe, axis=0)
+                # If the number of GRU states is larger than the true frame count, remove the padding states# Remove the first dimension
+                if len(gru_states_perframe) > true_frame_count:
+                    gru_states_perframe = gru_states_perframe[:true_frame_count]
                 all_gru_states.extend(gru_states_perframe)  # Add the GRU states to the list
             else:
                 _ = model.predict(inputs)
 
     # Save the GRU states for the last video
-    video_name_safe = re.sub(r'\W+', '_', prev_video_name)
-    output_path = os.path.join(output_dir, f'{video_name_safe}_gru_states.npy')
+    output_path = os.path.join(output_dir, f'{prev_video_name}.npy')
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     np.save(output_path, np.array(all_gru_states))
 

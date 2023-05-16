@@ -258,7 +258,8 @@ class E2EModel(BaseRGBModel):
             ).reshape(batch_size, clip_len, self._feat_dim)
 
             if true_clip_len != clip_len:
-                # Undo padding
+                # Undo padding．Finally, if the actual clip length is different from the clip length after padding
+                # (i.e., padding was performed), remove the padding portion from the feature tensor
                 im_feat = im_feat[:, :true_clip_len, :]
 
             pred_fine_result = self._pred_fine(im_feat)
