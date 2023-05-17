@@ -21,17 +21,21 @@ class FCPrediction(nn.Module):
 
 class GRUPrediction(nn.Module):
 
-    def __init__(self, feat_dim, num_classes, hidden_dim, num_layers=1):
+    def __init__(self, feat_dim, num_classes, hidden_dim, num_layers=1, return_states=False):
         super().__init__()
         self._gru = nn.GRU(
             feat_dim, hidden_dim, num_layers=num_layers, batch_first=True,
             bidirectional=True)
         self._fc_out = FCPrediction(2 * hidden_dim, num_classes)
         self._dropout = nn.Dropout()
+        self.return_states = return_states
 
     def forward(self, x):
-        y, _ = self._gru(x)
-        return self._fc_out(self._dropout(y))
+        y, h = self._gru(x)
+        if self.return_states:
+            return y, h
+        else:
+            return self._fc_out(self._dropout(y))
 
 
 class TCNPrediction(nn.Module):

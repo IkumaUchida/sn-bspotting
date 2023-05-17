@@ -146,7 +146,7 @@ class E2EModel(BaseRGBModel):
     class Impl(nn.Module):
 
         def __init__(self, num_classes, feature_arch, temporal_arch, clip_len,
-                     modality):
+                    modality, return_states=False):
             super().__init__()
             is_rgb = modality == 'rgb'
             in_channels = {'flow': 2, 'bw': 1, 'rgb': 3}[modality]
@@ -226,7 +226,8 @@ class E2EModel(BaseRGBModel):
                 if temporal_arch in ('gru', 'deeper_gru'):
                     self._pred_fine = GRUPrediction(
                         feat_dim, num_classes, hidden_dim,
-                        num_layers=3 if temporal_arch[0] == 'd' else 1)
+                        num_layers=3 if temporal_arch[0] == 'd' else 1,
+                        return_states=return_states)
                 else:
                     raise NotImplementedError(temporal_arch)
             elif temporal_arch == 'mstcn':
@@ -257,10 +258,19 @@ class E2EModel(BaseRGBModel):
             ).reshape(batch_size, clip_len, self._feat_dim)
 
             if true_clip_len != clip_len:
-                # Undo padding
+                # Undo padding．Finally, if the actual clip length is different from the clip length after padding
+                # (i.e., padding was performed), remove the padding portion from the feature tensor
                 im_feat = im_feat[:, :true_clip_len, :]
 
-            return self._pred_fine(im_feat)
+            pred_fine_result = self._pred_fine(im_feat)
+
+            if isinstance(pred_fine_result, tuple):
+                pred, gru_states = pred_fine_result
+            else:
+                pred = pred_fine_result
+                gru_states = None
+
+            return pred, gru_states
 
         def print_stats(self):
             print('Model params:',
@@ -271,11 +281,11 @@ class E2EModel(BaseRGBModel):
                 sum(p.numel() for p in self._pred_fine.parameters()))
 
     def __init__(self, num_classes, feature_arch, temporal_arch, clip_len,
-                 modality, device='cuda', multi_gpu=False):
+                modality, device='cuda', multi_gpu=False, return_states=False):
         self.device = device
         self._multi_gpu = multi_gpu
         self._model = E2EModel.Impl(
-            num_classes, feature_arch, temporal_arch, clip_len, modality)
+            num_classes, feature_arch, temporal_arch, clip_len, modality, return_states)
         self._model.print_stats()
 
         if multi_gpu:
@@ -296,7 +306,7 @@ class E2EModel(BaseRGBModel):
         if fg_weight != 1:
             ce_kwargs['weight'] = torch.FloatTensor(
                 [1] + [fg_weight] * (self._num_classes - 1)).to(self.device)
-            
+
         # FocalLossのインスタンスを作成
         focal_loss = FocalLoss(alpha=1, gamma=2, logits=True, reduce=True).to(self.device)
 
@@ -350,6 +360,24 @@ class E2EModel(BaseRGBModel):
             pred_cls = torch.argmax(pred, axis=2)
             return pred_cls.cpu().numpy(), pred.cpu().numpy()
 
+    def predict_with_gru_states(self, seq, use_amp=True):
+        if not isinstance(seq, torch.Tensor):
+            seq = torch.FloatTensor(seq)
+        if len(seq.shape) == 4: # (L, C, H, W)
+            seq = seq.unsqueeze(0)
+        if seq.device != self.device:
+            seq = seq.to(self.device)
+
+        self._model.eval()
+        with torch.no_grad():
+            with torch.cuda.amp.autocast() if use_amp else nullcontext():
+                y, gru_states = self._model(seq)
+            # if len(pred.shape) > 3:
+            #     pred = pred[-1]
+            # pred = torch.softmax(pred, axis=2)
+            # pred_cls = torch.argmax(pred, axis=2)
+            # return pred_cls.cpu().numpy(), pred.cpu().numpy(), np.reshape(gru_states.cpu().numpy(), (seq.shape[0], 768)) if gru_states is not None else None
+            return y.cpu().numpy(), gru_states.cpu().numpy() if gru_states is not None else None
 
 def evaluate(model, dataset, split, classes, save_pred, calc_stats=True,
              save_scores=True):
