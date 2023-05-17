@@ -90,7 +90,7 @@ docker-push:
 
 .PHONY: docker-run
 docker-run:
-	docker run --gpus all -t -it -v $(PWD):/workspace ikumauchida/sn-bspotting:latest bash
+	docker run --shm-size=128g --gpus all -t -it -v $(PWD):/workspace ikumauchida/sn-bspotting:latest bash
 
 #################################################################################
 # Singularity                                                     #
