@@ -3,19 +3,16 @@ from optuna.integration import PyTorchLightningPruningCallback
 import tempfile
 from tabulate import tabulate
 from util.io import load_json, load_gz_json, store_json
+from util.eval import smooth_and_peak_detection
 from eval import get_pred_file
 from eval_ensemble import ensemble
 from eval_soccernet_ball import get_args, store_eval_files, load_fps_dict
 from SoccerNet.Evaluation.ActionSpotting import evaluate as sn_evaluate
 from SoccerNet.Evaluation.utils import INVERSE_EVENT_DICTIONARY_BALL
 from collections import defaultdict
-from scipy.ndimage import gaussian_filter1d
-from scipy.signal import find_peaks
 import copy
 import os
 import glob
-import matplotlib.pyplot as plt
-import seaborn as sns
 import time
 import argparse
 import shutil
@@ -27,45 +24,6 @@ def eval_wrapper(metric, eval_dir, split_name, soccernet_path):
         SoccerNet_path=soccernet_path, Predictions_path=eval_dir,
         split=split_name, version=2, metric=metric, framerate=25, label_files="Labels-ball.json", num_classes=2, dataset="Ball")
     return results["a_mAP"]
-
-def smooth_and_peak_detection(pred, gaussian_sigma, peak_distance, peak_height, plot_smoothed=False, plot_peaks=False):
-    new_pred = []
-    for video_pred in pred:
-        events_by_label = defaultdict(list)
-        for e in video_pred['events']:
-            events_by_label[e['label']].append(e)
-        new_events = []
-        for label, events in events_by_label.items():
-            # Sort events by frame
-            events.sort(key=lambda x: x['frame'])
-            # Extract scores and apply Gaussian filter
-            scores = [e['score'] for e in events]
-            smoothed_scores = gaussian_filter1d(scores, sigma=gaussian_sigma)
-            # Find peaks
-            peaks, _ = find_peaks(smoothed_scores, distance=peak_distance, height=peak_height)
-            # Add peak events to new events
-            for peak in peaks:
-                new_events.append(events[peak])
-            # Plotting
-            if plot_smoothed:
-                plt.figure(figsize=(10, 4))
-                plt.plot(scores, label='Original scores')
-                plt.plot(smoothed_scores, label='Smoothed scores')
-                plt.legend()
-                plt.title(f'Video: {video_pred["video"]}, Label: {label}')
-                plt.show()
-            if plot_peaks:
-                plt.figure(figsize=(10, 4))
-                plt.plot(smoothed_scores)
-                plt.plot(peaks, smoothed_scores[peaks], "x")
-                plt.title(f'Video: {video_pred["video"]}, Label: {label} - Peaks')
-                plt.show()
-        new_video_pred = copy.deepcopy(video_pred)
-        new_video_pred['events'] = sorted(new_events, key=lambda x: x['frame'])
-        new_video_pred['num_events'] = len(new_events)
-        new_pred.append(new_video_pred)
-    return new_pred
-
 
 
 def objective(trial,  pred, split, soccernet_path, eval_dir):
@@ -90,13 +48,12 @@ def objective(trial,  pred, split, soccernet_path, eval_dir):
         split_name = 'valid'
     # Evaluate the results
     score = eval_wrapper('at1', trial_eval_dir, split_name, soccernet_path)
-    
+
     # Clean up the directory to save disk space
     shutil.rmtree(trial_eval_dir)
 
     # Return the 'a_map' score to be maximized
     return score
-
 
 
 def hpo(pred, split, soccernet_path, eval_dir, n_trials):
@@ -134,9 +91,9 @@ def get_args():
 def main():
     args = get_args()
     if len(args.pred_file) == 1:
-        args.pred_file = args.pred_file[0]
+        pred_file = args.pred_file[0]
         if os.path.isdir(pred_file):
-            pred_file, _ = get_pred_file(args.pred_file, args.split)
+            pred_file, _ = get_pred_file(pred_file, args.split)
             print('Evaluating on: {}'.format(pred_file))
         pred = (load_gz_json if pred_file.endswith('.gz') else load_json)(
                 pred_file)

@@ -1,6 +1,10 @@
 import copy
 from collections import defaultdict
 import numpy as np
+from scipy.ndimage import gaussian_filter1d
+from scipy.signal import find_peaks
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 class ErrorStat:
@@ -139,4 +143,44 @@ def non_maximum_supression(pred, window):
         new_video_pred['events'] = events
         new_video_pred['num_events'] = len(events)
         new_pred.append(new_video_pred)
+    return new_pred
+
+
+def smooth_and_peak_detection(pred, gaussian_sigma, peak_distance, peak_height, plot_smoothed=False, plot_peaks=False):
+    new_pred = []
+    for video_pred in pred:
+        events_by_label = defaultdict(list)
+        for e in video_pred['events']:
+            events_by_label[e['label']].append(e)
+        new_events = []
+        for label, events in events_by_label.items():
+            # Sort events by frame
+            events.sort(key=lambda x: x['frame'])
+            # Extract scores and apply Gaussian filter
+            scores = [e['score'] for e in events]
+            smoothed_scores = gaussian_filter1d(scores, sigma=gaussian_sigma)
+            # Find peaks
+            peaks, _ = find_peaks(smoothed_scores, distance=peak_distance, height=peak_height)
+            # Add peak events to new events
+            for peak in peaks:
+                new_events.append(events[peak])
+            # Plotting
+            if plot_smoothed:
+                plt.figure(figsize=(10, 4))
+                plt.plot(scores, label='Original scores')
+                plt.plot(smoothed_scores, label='Smoothed scores')
+                plt.legend()
+                plt.title(f'Video: {video_pred["video"]}, Label: {label}')
+                plt.show()
+            if plot_peaks:
+                plt.figure(figsize=(10, 4))
+                plt.plot(smoothed_scores)
+                plt.plot(peaks, smoothed_scores[peaks], "x")
+                plt.title(f'Video: {video_pred["video"]}, Label: {label} - Peaks')
+                plt.show()
+        new_video_pred = copy.deepcopy(video_pred)
+        new_video_pred['events'] = sorted(new_events, key=lambda x: x['frame'])
+        new_video_pred['num_events'] = len(new_events)
+        new_pred.append(new_video_pred)
+
     return new_pred
