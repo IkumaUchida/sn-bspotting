@@ -55,6 +55,21 @@ To evaluate a set of predictions with the mean-AP metric, use `python3 eval.py -
 
 The predictions are saved as either `pred-{split}.{epoch}.recall.json.gz` or `pred-{split}.{epoch}.json` files. The latter contains only the top class predictions for each frame, omitting all background, while the former contains all non-background detections above a low threshold, to complete the precision-recall curve.
 
+
+## extract features from the trained model
+
+Extract time series features using trained models
+To Extract features, use `python3 extract_e2e.py <moder_dir> <frame_dir> <output_dir> --extract --no_overlap -s `.
+* `<moder_dir>`: path to the trained model
+* `<frame_dir>`: path to the extracted frames
+* `<output_dir>`: path to save the extracted features
+* `--extract`: a trigger to extract features(must be True)
+* `--no_overlap`: a trigger to extract features without overlap
+* `-s`: a trigger to extract features from the [train/val/test/challnge] split
+
+
+
+
 ## upload to the evaluation server
 
 To create a SoccerNet package for evaluation, use `eval_soccernet_ball.py`

@@ -38,7 +38,8 @@ def get_score_file(pred_dir, split):
 
 
 def ensemble(dataset, results, fps_dict=None):
-    classes = load_classes(os.path.join('data', dataset, 'class.txt'))
+    ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+    classes = load_classes(os.path.join(ROOT_DIR, 'data', dataset, 'class.txt'))
     classes_inv = {v: k for k, v in classes.items()}
 
     pred_events = []
