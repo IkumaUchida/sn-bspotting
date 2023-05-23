@@ -4,20 +4,19 @@ import random
 import numpy as np
 import argparse
 
-from typing import Dict, List
+from typing import Dict
 from collections import defaultdict
 from tabulate import tabulate
 
 from SoccerNet.Evaluation.ActionSpotting import evaluate as sn_evaluate
 from SoccerNet.Evaluation.utils import INVERSE_EVENT_DICTIONARY_BALL
 
-
-def make_json(dict_of_predictions: Dict[str, List[List[float]]], output_path: str, confidence_threshold: float = 0.01, fps: int = 25) -> None:
+def make_json(dict_of_predictions: Dict[str, np.ndarray], output_path: str, confidence_threshold: float = 0.01, fps: int = 25) -> None:
     """
     This function transforms raw predictions into structured events per game and then merges all the predictions for each game into a single JSON file per game.
 
     Args:
-        dict_of_predictions (Dict[str, List[List[float]]]): A dictionary where each key is the video path and value is a 2D list of model predictions for each frame.
+        dict_of_predictions (Dict[str, np.ndarray]): A dictionary where each key is the video path and value is a 2D numpy array of model predictions for each frame.
         output_path (str): The output directory where the game directories will be created.
         confidence_threshold (float, optional): The minimum confidence required for a prediction to be considered. Defaults to 0.01.
         fps (int, optional): Frames per second. Used to calculate the position in the video. Defaults to 25.
@@ -29,8 +28,7 @@ def make_json(dict_of_predictions: Dict[str, List[List[float]]], output_path: st
     class_labels = {0: "None", 1: "DRIVE", 2: "PASS"}
 
     for video, predictions in dict_of_predictions.items():
-        predictions = np.array(predictions)
-
+        assert isinstance(predictions, np.ndarray), "The input must be a numpy array"
         assert predictions.ndim == 2, "The input array must be 2-dimensional"
         assert predictions.shape[1] == 3, "The input array must have 3 columns"
 
@@ -75,7 +73,6 @@ def make_json(dict_of_predictions: Dict[str, List[List[float]]], output_path: st
 
 
 def main():
-    #Example
     parser = argparse.ArgumentParser(description='Transform raw predictions into structured events and save them as JSON.')
     parser.add_argument('--output_path', type=str, default='./eval_dir_/', help='The output directory where the JSON files will be created.')
     args = parser.parse_args([])
@@ -92,12 +89,10 @@ def main():
             prediction = np.array([[random.random(), random.random(), random.random()] for _ in range(N)])
             prediction_normalized = prediction / prediction.sum(axis=1, keepdims=True)
             
-            dict_of_predictions[f'{game}/{i}'] = prediction_normalized.tolist()
+            dict_of_predictions[f'{game}/{i}'] = prediction_normalized
         
         make_json(dict_of_predictions, args.output_path, confidence_threshold=0.5)
 
-
-    # Evaluate Example
     soccernet_path = './data/soccernet_ball'
     split_name = 'test'
 
