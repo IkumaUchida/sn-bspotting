@@ -18,7 +18,7 @@ def make_json(dict_of_predictions: Dict[str, List[List[float]]], output_path: st
 
     Args:
         dict_of_predictions (Dict[str, List[List[float]]]): A dictionary where each key is the video path and value is a 2D list of model predictions for each frame.
-        eval_dir (str): The output directory where the game directories will be created.
+        output_path (str): The output directory where the game directories will be created.
         confidence_threshold (float, optional): The minimum confidence required for a prediction to be considered. Defaults to 0.01.
         fps (int, optional): Frames per second. Used to calculate the position in the video. Defaults to 25.
 
