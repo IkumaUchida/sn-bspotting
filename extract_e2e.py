@@ -27,7 +27,9 @@ def get_args():
     parser.add_argument('--extract', action='store_true', 
                         help='Flag to extract gru vectors or not')
     parser.add_argument('--gpu_parallel', action='store_true',
-                        help='Flag to enable multi-GPU parallelism')  # Add gpu_parallel parameter
+                        help='Flag to enable multi-GPU parallelism')
+    parser.add_argument('--input_type', default='RGB', 
+                        help='Type of input used for the model (RGB, Flow, etc.)')  # Add input_type parameter
     return parser.parse_args()
 
 
@@ -47,7 +49,7 @@ def get_last_epoch(model_dir):
     assert last_epoch >= 0
     return last_epoch
 
-def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, dataset, extract, gpu_parallel):
+def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, dataset, extract,input_type , gpu_parallel):
     config_path = os.path.join(model_dir, 'config.json')
     config = load_json(config_path)
     if dataset is None:
@@ -88,7 +90,9 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
             # Check if the video name has changed
             if video['video'] != prev_video_name:
                 # Save the GRU states for the previous video
-                output_path = os.path.join(output_dir, f'{prev_video_name}.npy')
+                sequence_number = "1st" if prev_video_name.split("/")[-1] == "1" else "2nd"  # Update this line
+                event_name = "/".join(prev_video_name.split("/")[:-1])  # Add this line
+                output_path = os.path.join(output_dir, f'{event_name} {sequence_number}_{input_type}_features.npy')  # Update this line
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 np.save(output_path, np.array(all_gru_states))
                 print(f'Saved GRU states for {prev_video_name} to {output_path}')
@@ -107,7 +111,9 @@ def extract_gru_features(model_dir, frame_dir, output_dir, split, no_overlap, da
                 _ = model.predict(inputs)
 
     # Save the GRU states for the last video
-    output_path = os.path.join(output_dir, f'{prev_video_name}.npy')
+    sequence_number = "1st" if prev_video_name.split("/")[-1] == "1" else "2nd"  # Update this line
+    event_name = "/".join(prev_video_name.split("/")[:-1])  # Add this line
+    output_path = os.path.join(output_dir, f'{event_name} {sequence_number}_{input_type}_features.npy')  # Update this line
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     np.save(output_path, np.array(all_gru_states))
 
