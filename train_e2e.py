@@ -26,6 +26,9 @@ from util.eval import process_frame_predictions
 from util.io import load_json, store_json, store_gz_json, clear_files
 from util.dataset import DATASETS, load_classes
 from util.score import compute_mAPs
+import wandb
+
+
 
 EPOCH_NUM_FRAMES = 500000
 
@@ -80,21 +83,27 @@ def get_args():
             'efficientnet_b6',
             'efficientnet_b7',
         ], help='CNN architecture for feature extraction')
+    
     parser.add_argument(
         '-t', '--temporal_arch', type=str, default='gru',
         choices=['', 'gru', 'deeper_gru', 'mstcn', 'asformer'],
         help='Spotting architecture, after spatial pooling')
 
     parser.add_argument('--clip_len', type=int, default=100)
+    
     parser.add_argument('--crop_dim', type=int, default=224)
+    
     parser.add_argument('--batch_size', type=int, default=8)
+    
     parser.add_argument('-ag', '--acc_grad_iter', type=int, default=1,
                         help='Use gradient accumulation')
 
     parser.add_argument('--warm_up_epochs', type=int, default=3)
+    
     parser.add_argument('--num_epochs', type=int, default=50)
 
     parser.add_argument('-lr', '--learning_rate', type=float, default=0.001)
+    
     parser.add_argument('-s', '--save_dir', type=str, required=True,
                         help='Dir to save checkpoints and predictions')
 
@@ -102,19 +111,23 @@ def get_args():
                         help='Resume training from checkpoint in <save_dir>')
 
     parser.add_argument('--start_val_epoch', type=int)
+    
     parser.add_argument('--criterion', choices=['map', 'loss'], default='map')
-
+    
     parser.add_argument('--dilate_len', type=int, default=0,
                         help='Label dilation when training')
+    
     parser.add_argument('--mixup', type=bool, default=True)
-
+    
     parser.add_argument('-j', '--num_workers', type=int,
                         help='Base number of dataloader workers')
-
+    
     # Sample based on foreground
     parser.add_argument('--fg_upsample', type=float)
-
+    
     parser.add_argument('-mgpu', '--gpu_parallel', action='store_true')
+    
+    parser.add_argument('--return_states ', type=bool, default=False)
     return parser.parse_args()
 
 
@@ -321,7 +334,7 @@ class E2EModel(BaseRGBModel):
                     else label.view(-1, label.shape[-1])
 
                 with torch.cuda.amp.autocast():
-                    pred = self._model(frame)
+                    pred = self._model(frame)[0]
 
                     loss = 0.
                     if len(pred.shape) == 3:
@@ -583,6 +596,11 @@ def get_lr_scheduler(args, optimizer, num_steps_per_epoch):
 
 
 def main(args):
+    
+    
+    # wandbの初期化
+    wandb.init(project="sn-bspotting e2e", config=args)
+    
     if args.num_workers is not None:
         global BASE_NUM_WORKERS
         BASE_NUM_WORKERS = args.num_workers
@@ -636,6 +654,9 @@ def main(args):
             train_loader, optimizer, scaler,
             lr_scheduler=lr_scheduler, acc_grad_iter=args.acc_grad_iter)
         val_loss = model.epoch(val_loader, acc_grad_iter=args.acc_grad_iter)
+        
+        wandb.log({"Train Loss": train_loss, "Val Loss": val_loss})
+        
         print('[Epoch {}] Train loss: {:0.5f} Val loss: {:0.5f}'.format(
             epoch, train_loss, val_loss))
 
@@ -654,6 +675,9 @@ def main(args):
                     os.makedirs(args.save_dir, exist_ok=True)
                 val_mAP = evaluate(model, val_data_frames, 'VAL', classes,
                                     pred_file, save_scores=False)
+                
+                wandb.log({"Val mAP": val_mAP})
+
                 if args.criterion == 'map' and val_mAP > best_criterion:
                     best_criterion = val_mAP
                     best_epoch = epoch
