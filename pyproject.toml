@@ -35,6 +35,8 @@ torchvision = "^0.15.1"
 torchaudio = "^2.0.1"
 timm = "^0.6.13"
 optuna = "^3.1.1"
+seaborn = "^0.12.2"
+wandb = "^0.15.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.1.0"
