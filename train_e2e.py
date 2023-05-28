@@ -128,6 +128,9 @@ def get_args():
     parser.add_argument('-mgpu', '--gpu_parallel', action='store_true')
     
     parser.add_argument('--return_states ', type=bool, default=False)
+    
+    parser.add_argument('--stack_grayscale', action='store_true', help='Stack grayscale images')
+    
     return parser.parse_args()
 
 
@@ -320,7 +323,6 @@ class E2EModel(BaseRGBModel):
             ce_kwargs['weight'] = torch.FloatTensor(
                 [1] + [fg_weight] * (self._num_classes - 1)).to(self.device)
 
-        # FocalLossのインスタンスを作成
         focal_loss = FocalLoss(alpha=1, gamma=2, logits=True, reduce=True).to(self.device)
 
         epoch_loss = 0.
@@ -329,7 +331,6 @@ class E2EModel(BaseRGBModel):
                 frame = loader.dataset.load_frame_gpu(batch, self.device)
                 label = batch['label'].to(self.device)
 
-                # Depends on whether mixup is used
                 label = label.flatten() if len(label.shape) == 2 \
                     else label.view(-1, label.shape[-1])
 
@@ -509,14 +510,27 @@ def get_datasets(args):
 
     print('Dataset size:', dataset_len)
     train_data = ActionSpotDataset(
-        classes, os.path.join('data', args.dataset, 'train.json'),
-        args.frame_dir, args.modality, args.clip_len, dataset_len,
-        is_eval=False, **dataset_kwargs)
+        classes, 
+        os.path.join('data', args.dataset, 'train.json'),
+        args.frame_dir, 
+        args.modality, 
+        args.clip_len, 
+        dataset_len,
+        is_eval=False, 
+        stack_grayscale=args.stack_grayscale, 
+        **dataset_kwargs)
+    
     train_data.print_info()
     val_data = ActionSpotDataset(
-        classes, os.path.join('data', args.dataset, 'val.json'),
-        args.frame_dir, args.modality, args.clip_len, dataset_len // 4,
+        classes, 
+        os.path.join('data', args.dataset, 'val.json'),
+        args.frame_dir, 
+        args.modality, 
+        args.clip_len, 
+        dataset_len // 4,
+        stack_grayscale=args.stack_grayscale, 
         **dataset_kwargs)
+    
     val_data.print_info()
 
     val_data_frames = None
@@ -596,8 +610,6 @@ def get_lr_scheduler(args, optimizer, num_steps_per_epoch):
 
 
 def main(args):
-    
-    
     # wandbの初期化
     wandb.init(project="sn-bspotting e2e", config=args)
     
