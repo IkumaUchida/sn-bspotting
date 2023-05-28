@@ -3,6 +3,7 @@ models/*
 outputs/*
 Visualization/output/*
 x_ignore/*
+wandb/*
 
 __pycache__
 .coverage
