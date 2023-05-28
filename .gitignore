@@ -1,7 +1,7 @@
 data/*
 models/*
 outputs/*
-Visualization/output/*
+Visualization/Visualization/output/*
 x_ignore/*
 wandb/*
 
