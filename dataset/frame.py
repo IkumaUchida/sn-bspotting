@@ -4,12 +4,14 @@ import os
 import copy
 import random
 import numpy as np
+from typing import List, Optional, Tuple
+
 import torch
 import torch.nn as nn
+from torchvision.transforms import functional as F
 from torch.utils.data import Dataset
 import torchvision
 import torchvision.transforms as transforms
-import numpy as np
 from torchvision.transforms import RandomAffine, RandomPerspective
 
 from util.io import load_json
@@ -46,12 +48,13 @@ class FrameReader:
     IMG_NAME = '{:06d}.jpg'
 
     def __init__(self, frame_dir, modality, crop_transform, img_transform,
-                 same_transform):
+                same_transform, stack_grayscale=False):
         self._frame_dir = frame_dir
         self._is_flow = modality == 'flow'
         self._crop_transform = crop_transform
         self._img_transform = img_transform
         self._same_transform = same_transform
+        self._stack_grayscale = stack_grayscale # Stack grayscale images
 
     def read_frame(self, frame_path):
         img = torchvision.io.read_image(frame_path).float() / 255
@@ -79,6 +82,8 @@ class FrameReader:
                 FrameReader.IMG_NAME.format(frame_num))
             try:
                 img = self.read_frame(frame_path)
+                if self._stack_grayscale:
+                    img = torchvision.transforms.Grayscale()(img)  # Convert to grayscale
                 if self._crop_transform:
                     if self._same_transform:
                         if rand_crop_state is None:
@@ -90,7 +95,6 @@ class FrameReader:
                     img = self._crop_transform(img)
 
                     if rand_state_backup is not None:
-                        # Make sure that rand state still advances
                         random.setstate(rand_state_backup)
                         rand_state_backup = None
 
@@ -98,15 +102,27 @@ class FrameReader:
                     img = self._img_transform(img)
                 ret.append(img)
             except RuntimeError:
-                # print('Missing file!', frame_path)
                 n_pad_end += 1
 
-        # In the multicrop case, the shape is (B, T, C, H, W)
-        ret = torch.stack(ret, dim=int(len(ret[0].shape) == 4))
+        # Processing frames depending on whether grayscale stacking is enabled or not
+        processed_frames = []
+        if self._stack_grayscale:
+            # Going through the frames and stacking them in groups of three
+            for i in range(len(ret) - 2):
+                stacked_frame = torch.cat([ret[i], ret[i + 1], ret[i + 2]], dim=0)
+                processed_frames.append(stacked_frame)
+        else:
+            first_frame_shape = ret[0].shape
+            processed_frames = [frame.expand(first_frame_shape) for frame in ret]
+
+        # Stacking the processed_frames
+        ret = torch.stack(processed_frames, dim=int(len(processed_frames[0].shape) == 4))
+
+        # Applying the same transform if necessary
         if self._same_transform:
             ret = self._img_transform(ret)
 
-        # Always pad start, but only pad end if requested
+        # Padding the frames if required
         if n_pad_start > 0 or (pad and n_pad_end > 0):
             ret = nn.functional.pad(
                 ret, (0, 0, 0, 0, 0, 0, n_pad_start, n_pad_end if pad else 0))
@@ -314,11 +330,13 @@ class ActionSpotDataset(Dataset):
             pad_len=DEFAULT_PAD_LEN,    # Number of frames to pad the start
                                         # and end of videos
             fg_upsample=-1,             # Sample foreground explicitly
+            stack_grayscale=False,
     ):
         self._src_file = label_file
         self._labels = load_json(label_file)
         self._class_dict = classes
         self._video_idxs = {x['video']: i for i, x in enumerate(self._labels)}
+        self._stack_grayscale = stack_grayscale
 
         # Sample videos weighted by their length
         num_frames = [v['num_frames'] for v in self._labels]
@@ -363,7 +381,7 @@ class ActionSpotDataset(Dataset):
             defer_transform=self._gpu_transform is not None)
 
         self._frame_reader = FrameReader(
-            frame_dir, modality, crop_transform, img_transform, same_transform)
+            frame_dir, modality, crop_transform, img_transform, same_transform, stack_grayscale)
 
     def load_frame_gpu(self, batch, device):
         if self._gpu_transform is None:
@@ -426,9 +444,16 @@ class ActionSpotDataset(Dataset):
             video_meta['video'], base_idx,
             base_idx + self._clip_len * self._stride, pad=True,
             stride=self._stride, randomize=not self._is_eval)
+        
+        if self._frame_reader._stack_grayscale:
+            label_shape = len(labels) - 2
+            new_labels = np.zeros(label_shape, int)
+            i_range = range(len(labels) - 2)
+            new_labels[:] = labels[i_range]
+            labels = new_labels
 
-        return {'frame': frames, 'contains_event': int(np.sum(labels) > 0),
-                'label': labels}
+        return {'frame': frames, 'contains_event': int(np.sum(labels) > 0), 
+                'label': labels} 
 
     def __getitem__(self, unused):
         ret = self._get_one()
@@ -436,9 +461,14 @@ class ActionSpotDataset(Dataset):
         if self._mixup:
             mix = self._get_one()    # Sample another clip
             l = random.betavariate(0.2, 0.2)
-            label_dist = np.zeros((self._clip_len, len(self._class_dict) + 1))
-            label_dist[range(self._clip_len), ret['label']] = l
-            label_dist[range(self._clip_len), mix['label']] += 1. - l
+            if self._stack_grayscale:
+                label_dist = np.zeros((self._clip_len -2, len(self._class_dict) + 1))
+                label_dist[range(self._clip_len -2), ret['label']] = l
+                label_dist[range(self._clip_len -2), mix['label']] += 1. - l
+            else:
+                label_dist = np.zeros((self._clip_len, len(self._class_dict) + 1))
+                label_dist[range(self._clip_len), ret['label']] = l
+                label_dist[range(self._clip_len), mix['label']] += 1. - l
 
             if self._gpu_transform is None:
                 ret['frame'] = l * ret['frame'] + (1. - l) * mix['frame']
@@ -474,7 +504,8 @@ class ActionSpotVideoDataset(Dataset):
             flip=False,
             multi_crop=False,
             skip_partial_end=True,
-            extract_features=False
+            extract_features=False,
+            stack_grayscale=False
     ):
         self._src_file = label_file
         self._labels = load_json(label_file)
@@ -488,7 +519,7 @@ class ActionSpotVideoDataset(Dataset):
             is_eval=True, crop_dim=crop_dim, modality=modality, same_transform=True, multi_crop=multi_crop)
 
         self._frame_reader = FrameReader(
-            frame_dir, modality, crop_transform, img_transform, False)
+            frame_dir, modality, crop_transform, img_transform, False, stack_grayscale)
 
         self._flip = flip
         self._multi_crop = multi_crop
