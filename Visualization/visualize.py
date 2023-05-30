@@ -6,7 +6,11 @@ from pathlib import Path
 
 import numpy as np
 
-def draw_bar_chart(frame, drive_confidence, pass_confidence, max_confidence=1.0):
+def draw_bar_chart(frame, drive_confidence, pass_confidence, max_confidence=1.0, pred_vis=True):
+    # If pred_vis is False, do not draw bar chart.
+    if not pred_vis:
+        return
+
     bar_chart_width = 750
     chart_height = 60
     chart_x = 50
@@ -47,7 +51,7 @@ def put_text_with_background(frame, text, position, font, font_scale, color, thi
     cv2.putText(frame, text, position, font, font_scale, color, thickness)
 
 
-def main(input_video, input_json, output_video_dir, output_video_name, start, end):
+def main(input_video, input_json, output_video_dir, output_video_name, start, end, pred_vis):
     # Create output directory if it doesn't exist
     output_dir = Path(output_video_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -55,6 +59,11 @@ def main(input_video, input_json, output_video_dir, output_video_name, start, en
     # Load the JSON file
     with open(input_json) as f:
         data = json.load(f)
+
+    # Determine key for accessing data based on pred_vis
+    print(pred_vis)
+    pred_key = "predictions" if pred_vis else "annotations"
+    print(pred_key)
 
     # Open the input video
     cap = cv2.VideoCapture(input_video)
@@ -66,10 +75,24 @@ def main(input_video, input_json, output_video_dir, output_video_name, start, en
     end_frame = int(end * fps)
 
     # Convert position to frame number and store it as keys with label and confidence as values
+
+    # Convert position to frame number and store it as keys with label and (confidence as values if pred_vis is True)
     events = {}
-    for entry in data["predictions"]:
-        frame_number = int(int(entry["position"]) / 1000 * fps)
-        events[frame_number] = (entry["label"], float(entry["confidence"]))
+    for entry in data[pred_key]:
+        # Skip entries from the other half if a specific half is requested
+        if args.half is not None and int(entry["gameTime"].split(" - ")[0]) != args.half:
+            continue
+
+        frame_number = int(int(entry["position"])* fps / 1000)
+        if pred_vis:
+            events[int(frame_number)] = (entry["label"], float(entry["confidence"]))
+        else:
+            events[int(frame_number)] = entry["label"]
+
+    # events = {}
+    # for entry in data["annotations"]:
+    #     frame_number = int(int(entry["position"]) / 1000 * fps)
+    #     events[frame_number] = (entry["label"], float(entry["confidence"]))
 
     # Set the starting frame
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -92,21 +115,31 @@ def main(input_video, input_json, output_video_dir, output_video_name, start, en
             break
 
         if frame_number in events:
-            label, confidence = events[frame_number]
-            label_display_frames_left = fps // 2  # Display label for half a second
-
-            if label == "DRIVE":
-                drive_confidence = confidence
-                pass_confidence = 0
+            # A new event has happened, show this event
+            if pred_vis:
+                label, confidence = events[int(frame_number)]
+                if label == "DRIVE":
+                    drive_confidence = confidence
+                    pass_confidence = 0
+                else:
+                    drive_confidence = 0
+                    pass_confidence = confidence
             else:
-                drive_confidence = 0
-                pass_confidence = confidence
+                label = events[int(frame_number)]
+
+            label_display_frames_left = int(fps * 0.5)  # show label for 0.5 seconds
 
         if label_display_frames_left > 0:
             put_text_with_background(frame, label, (width - 200, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
             label_display_frames_left -= 1
 
-        draw_bar_chart(frame, drive_confidence, pass_confidence)
+        if label_display_frames_left == 0:
+            # There is no event at the moment, reset everything
+            label = None
+            drive_confidence = 0
+            pass_confidence = 0
+
+        draw_bar_chart(frame, drive_confidence, pass_confidence, pred_vis=pred_vis)
 
         out.write(frame)
         print(f"Writing frame {frame_number}")
@@ -126,9 +159,12 @@ if __name__ == "__main__":
     parser.add_argument("--output_video_name", type=str, required=True, help="Name of the output video file.")
     parser.add_argument("--start", type=int, default=0, help="Start time (in seconds) of the output video.")
     parser.add_argument("--end", type=int, default=60, help="End time (in seconds) of the output video.")
+    parser.add_argument("--pred_vis", type=bool, default=False, help="Display prediction or GT labels.")
+    parser.add_argument("--half", type=int, choices=[1, 2], help="Which half of the game to process (1 or 2). If not specified, process the entire game.")
+
     args = parser.parse_args()
 
-    main(args.input_video, args.input_json, args.output_video_dir, args.output_video_name, args.start, args.end)
+    main(args.input_video, args.input_json, args.output_video_dir, args.output_video_name, args.start, args.end, args.pred_vis)
 
 
 
