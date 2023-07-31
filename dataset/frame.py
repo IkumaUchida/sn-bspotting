@@ -3,6 +3,7 @@
 import os
 import copy
 import random
+import glob
 import numpy as np
 import torch
 import torch.nn as nn
@@ -567,3 +568,132 @@ class ActionSpotVideoDataset(Dataset):
         print('{} : {} videos, {} frames ({} stride), {:0.5f}% non-bg'.format(
             self._src_file, len(self._labels), num_frames, self._stride,
             num_events / num_frames * 100))
+
+
+# class UnlabeledVideoDataset(Dataset):
+#     def __init__(self, frame_dir, modality, clip_len, overlap_len=0, crop_dim=None, stride=1, pad_len=DEFAULT_PAD_LEN, flip=False, multi_crop=False, skip_partial_end=True):
+#         self._frame_dir = frame_dir
+#         self._clip_len = clip_len
+#         self._stride = stride
+
+#         crop_transform, img_transform = _get_img_transforms(
+#             is_eval=True, crop_dim=crop_dim, modality=modality, same_transform=True, multi_crop=multi_crop)
+
+#         self._frame_reader = FrameReader(
+#             frame_dir, modality, crop_transform, img_transform, False)
+
+#         self._flip = flip
+#         self._multi_crop = multi_crop
+
+#         self._clips = []
+#         self._videos = self._get_video_list(frame_dir)
+#         for video in self._videos:
+#             has_clip = False
+#             num_frames = self._get_num_frames(video)
+#             for i in range(
+#                 -pad_len * self._stride,
+#                 max(0, num_frames - (overlap_len * stride) * int(skip_partial_end)), \
+#                 (clip_len - overlap_len) * self._stride
+#             ):
+#                 has_clip = True
+#                 self._clips.append((video, i))
+#             assert has_clip, video
+
+#     def _get_video_list(self, frame_dir):
+#         # returns a list of video names stored in the frame_dir directory
+#         videos = [name for name in os.listdir(frame_dir) if os.path.isdir(os.path.join(frame_dir, name))]
+#         return videos
+
+#     def _get_num_frames(self, video):
+#         # returns the number of frames in the video
+#         video_dir = os.path.join(self._frame_dir, video)
+#         num_frames = len(glob.glob(os.path.join(video_dir, '*.jpg')))
+#         print("video_dir: {}".format(video_dir))
+#         print('video: {}, num_frames: {}'.format(video, num_frames))
+#         return num_frames
+
+#     def __len__(self):
+#         return len(self._clips)
+
+#     def __getitem__(self, idx):
+#         video_name, start = self._clips[idx]
+#         frames = self._frame_reader.load_frames(
+#             video_name, start, start + self._clip_len * self._stride, pad=True,
+#             stride=self._stride)
+
+#         if self._flip:
+#             frames = torch.stack((frames, frames.flip(-1)), dim=0)
+
+#         return {'video': video_name, 'start': start // self._stride, 'frame': frames}
+    
+    
+import glob
+import os
+
+class UnlabeledVideoDataset(Dataset):
+    def __init__(self, frame_dir, modality, clip_len, overlap_len=0, crop_dim=None, stride=1, pad_len=DEFAULT_PAD_LEN, flip=False, multi_crop=False, skip_partial_end=True):
+        self._frame_dir = frame_dir
+        self._clip_len = clip_len
+        self._stride = stride
+
+        crop_transform, img_transform = _get_img_transforms(
+            is_eval=True, crop_dim=crop_dim, modality=modality, same_transform=True, multi_crop=multi_crop)
+
+        self._frame_reader = FrameReader(
+            frame_dir, modality, crop_transform, img_transform, False)
+
+        self._flip = flip
+        self._multi_crop = multi_crop
+
+        self._clips = []
+        self._videos = self._get_video_list(frame_dir)
+        print("self._videos: {}".format(self._videos)   )
+        for video in self._videos:
+            has_clip = False
+            num_frames = self._get_num_frames(video)
+            for i in range(
+                -pad_len * self._stride,
+                max(0, num_frames - (overlap_len * stride) * int(skip_partial_end)), \
+                (clip_len - overlap_len) * self._stride
+            ):
+                has_clip = True
+                self._clips.append((video, i))
+            assert has_clip, video
+
+    def _get_video_list(self, frame_dir):
+        # returns a list of video names stored in the frame_dir directory
+        videos = []
+        for root, dirs, files in os.walk(frame_dir):
+            if any(fname.endswith('.jpg') for fname in files):
+                videos.append(root)
+        return videos
+
+    def _get_num_frames(self, video):
+        # returns the number of frames in the video
+        num_frames = len(glob.glob(os.path.join(video, '*.jpg')))
+        print('video: {}, num_frames: {}'.format(video, num_frames))
+        return num_frames
+
+    def __len__(self):
+        return len(self._clips)
+
+    def __getitem__(self, idx):
+        video_name, start = self._clips[idx]
+        frames = self._frame_reader.load_frames(
+            video_name, start, start + self._clip_len * self._stride, pad=True,
+            stride=self._stride)
+
+        if self._flip:
+            frames = torch.stack((frames, frames.flip(-1)), dim=0)
+
+        return {'video': video_name, 'start': start // self._stride, 'frame': frames}
+
+    @property
+    def augment(self):
+        return self._flip or self._multi_crop
+
+    @property
+    def videos(self):
+        return sorted([
+            (video, len(glob.glob(os.path.join(video, '*.jpg'))) // self._stride,
+             30 / self._stride) for video in self._videos])

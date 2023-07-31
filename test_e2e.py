@@ -5,11 +5,12 @@ import os
 import argparse
 import re
 import torch
+import numpy as np
 
-from dataset.frame import ActionSpotVideoDataset
+from dataset.frame import ActionSpotVideoDataset, UnlabeledVideoDataset
 from util.io import load_json
 from util.dataset import load_classes
-from train_e2e import E2EModel, evaluate
+from train_e2e import E2EModel, evaluate, inference
 
 
 def get_args():
@@ -20,6 +21,9 @@ def get_args():
                         choices=['train', 'val', 'test', 'challenge'],
                         required=True)
     parser.add_argument('--no_overlap', action='store_true')
+    parser.add_argument('--evaluate_flag', action='store_true', help='Evaluate the model')
+    parser.add_argument('--predict_flag', action='store_true', help='Predict using the model')
+
 
     save = parser.add_mutually_exclusive_group()
     save.add_argument('--save', action='store_true',
@@ -49,8 +53,15 @@ def get_last_epoch(model_dir):
     assert last_epoch >= 0
     return last_epoch
 
+def predict(model, data):
+    results = []
+    for frame in data:
+        pred_cls, pred_prob = model.predict(frame)
+        results.append(pred_prob)
+    return np.array(results)
 
-def main(model_dir, frame_dir, split, no_overlap, save, save_as, dataset):
+
+def main(model_dir, frame_dir, split, no_overlap, save, save_as, evaluate_flag, predict_flag, dataset):
     config_path = os.path.join(model_dir, 'config.json')
     with open(config_path) as fp:
         print(fp.read())
@@ -69,7 +80,7 @@ def main(model_dir, frame_dir, split, no_overlap, save, save_as, dataset):
             print('Dataset mismatch: {} != {}'.format(
                 dataset, config['dataset']))
 
-    classes = load_classes(os.path.join('data', dataset, 'class.txt'))
+    classes = load_classes(os.path.join('../../../', 'data', dataset, 'class.txt'))
 
     model = E2EModel(
         len(classes) + 1, config['feature_arch'], config['temporal_arch'],
@@ -77,12 +88,6 @@ def main(model_dir, frame_dir, split, no_overlap, save, save_as, dataset):
         multi_gpu=config['gpu_parallel'])
     model.load(torch.load(os.path.join(
         model_dir, 'checkpoint_{:03d}.pt'.format(best_epoch))))
-
-    split_path = os.path.join('data', dataset, '{}.json'.format(split))
-    split_data = ActionSpotVideoDataset(
-        classes, split_path, frame_dir, config['modality'], config['clip_len'],
-        overlap_len=0 if no_overlap else config['clip_len'] // 2,
-        crop_dim=config['crop_dim'])
 
     pred_file = None
     if save_as is not None:
@@ -95,9 +100,57 @@ def main(model_dir, frame_dir, split, no_overlap, save, save_as, dataset):
     if pred_file is not None:
         print('Saving predictions:', pred_file)
 
-    evaluate(model, split_data, split.upper(), classes, pred_file,
-             calc_stats=False)
+    if evaluate_flag:
+        split_path = os.path.join('../../../', 'data', dataset, '{}.json'.format(split))
+        split_data = ActionSpotVideoDataset(
+            classes, split_path, frame_dir, config['modality'], config['clip_len'],
+            overlap_len=0 if no_overlap else config['clip_len'] // 2,
+            crop_dim=config['crop_dim'])
+        print("Length of split_data: ", len(split_data) )
+        print(split_data[1])
+        
+        # evaluate(model, split_data, split.upper(), classes, pred_file,
+        #         calc_stats=False)
 
+    if predict_flag:
+        print("config['clip_len']: ", config['clip_len'])
+        split_data = UnlabeledVideoDataset(
+            frame_dir, 
+            modality=config['modality'], 
+            clip_len=config['clip_len'],
+            overlap_len=0 if no_overlap else config['clip_len'] // 2,
+            crop_dim=config['crop_dim'])
+        
+        #check getitem
+        print("Length of split_data: ", len(split_data))
+        # print(split_data[1])
+
+        pred_probs = inference(model, split_data, classes)
+        print("pred_probs: ", pred_probs)
+        print("type(pred_probs): ", type(pred_probs))
+        #save pred_probs as json
+        # serialize the data to a JSON formatted string
+        import json
+        
+        # convert the dictionary to be JSON serializable
+        pred_probs_list = make_json_serializable(pred_probs)
+
+        # serialize the list to a JSON formatted string
+        json_pred_probs = json.dumps(pred_probs_list)
+
+        # write the JSON data to a file
+        with open('pred_probs.json', 'w') as f:
+            f.write(json_pred_probs)
+            
+def make_json_serializable(data):
+    if isinstance(data, dict):
+        return {k: make_json_serializable(v) for k, v in data.items()}
+    elif isinstance(data, (list, tuple)):
+        return [make_json_serializable(v) for v in data]
+    elif isinstance(data, np.ndarray):
+        return data.tolist()
+    else:
+        return data
 
 if __name__ == '__main__':
     main(**vars(get_args()))
