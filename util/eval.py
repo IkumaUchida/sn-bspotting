@@ -1,6 +1,8 @@
 import copy
 from collections import defaultdict
 import numpy as np
+from typing import Dict, List, Tuple, Union
+
 
 
 class ErrorStat:
@@ -57,36 +59,66 @@ class ForegroundF1:
             denom = 1
         return self._tp[k] / denom
 
-
 def process_frame_predictions(
-        dataset, classes, pred_dict, high_recall_score_threshold=0.01
-):
+    dataset: 'Dataset',  # Assuming Dataset as a placeholder for the actual type
+    classes: Dict[str, int], 
+    pred_dict: Dict[str, Tuple[np.ndarray, np.ndarray]], 
+    high_recall_score_threshold: float = 0.01, 
+    inference_only: bool = False
+) -> Union[
+    Tuple['ErrorStat', 'ForegroundF1', List[Dict], List[Dict], Dict[str, List]],
+    Tuple[List[Dict], List[Dict], Dict[str, List]]
+]:
+    """Processes frame-level predictions, computes statistics, and forms event-level predictions.
+
+    Args:
+        dataset: Dataset containing the videos.
+        classes: Mapping from class name to class index.
+        pred_dict: Mapping from video name to (scores, support) tuple.
+        high_recall_score_threshold: Threshold for high recall predictions.
+        inference_only: If True, skip computation of error statistics.
+
+    Returns:
+        - If `inference_only` is False, returns a tuple containing:
+            - error statistics (ErrorStat),
+            - foreground F1 (ForegroundF1),
+            - event-level predictions (list of dict),
+            - high recall event-level predictions (list of dict),
+            - frame-level scores (dict of list).
+        - If `inference_only` is True, returns a tuple containing:
+            - event-level predictions (list of dict),
+            - high recall event-level predictions (list of dict),
+            - frame-level scores (dict of list).
+    """
     classes_inv = {v: k for k, v in classes.items()}
 
     fps_dict = {}
     for video, _, fps in dataset.videos:
         fps_dict[video] = fps
 
-    err = ErrorStat()
-    f1 = ForegroundF1()
+    if not inference_only:
+        err = ErrorStat()
+        f1 = ForegroundF1()
 
     pred_events = []
     pred_events_high_recall = []
     pred_scores = {}
     for video, (scores, support) in sorted(pred_dict.items()):
-        label = dataset.get_labels(video)
-        # support[support == 0] = 1   # get rid of divide by zero
+        label = dataset.get_labels(video) if not inference_only else None
         assert np.min(support) > 0, (video, support.tolist())
         scores /= support[:, None]
         pred = np.argmax(scores, axis=1)
-        err.update(label, pred)
+        
+        if not inference_only:
+            err.update(label, pred)
 
         pred_scores[video] = scores.tolist()
 
         events = []
         events_high_recall = []
         for i in range(pred.shape[0]):
-            f1.update(label[i], pred[i])
+            if not inference_only:
+                f1.update(label[i], pred[i])
 
             if pred[i] != 0:
                 events.append({
@@ -109,8 +141,11 @@ def process_frame_predictions(
         pred_events_high_recall.append({
             'video': video, 'events': events_high_recall,
             'fps': fps_dict[video]})
-
-    return err, f1, pred_events, pred_events_high_recall, pred_scores
+    
+    if inference_only:
+        return pred_events, pred_events_high_recall, pred_scores
+    else:
+        return err, f1, pred_events, pred_events_high_recall, pred_scores
 
 
 def non_maximum_supression(pred, window):
