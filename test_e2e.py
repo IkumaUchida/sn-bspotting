@@ -6,6 +6,7 @@ import argparse
 import re
 import torch
 import numpy as np
+import json
 
 from dataset.frame import ActionSpotVideoDataset, UnlabeledVideoDataset
 from util.io import load_json
@@ -22,7 +23,7 @@ def get_args():
                         required=True)
     parser.add_argument('--no_overlap', action='store_true')
     parser.add_argument('--evaluate_flag', action='store_true', help='Evaluate the model')
-    parser.add_argument('--predict_flag', action='store_true', help='Predict using the model')
+    parser.add_argument('--inference_flag', action='store_true', help='Predict using the model')
 
 
     save = parser.add_mutually_exclusive_group()
@@ -61,7 +62,7 @@ def predict(model, data):
     return np.array(results)
 
 
-def main(model_dir, frame_dir, split, no_overlap, save, save_as, evaluate_flag, predict_flag, dataset):
+def main(model_dir, frame_dir, split, no_overlap, save, save_as, evaluate_flag, inference_flag, dataset):
     config_path = os.path.join(model_dir, 'config.json')
     with open(config_path) as fp:
         print(fp.read())
@@ -106,13 +107,17 @@ def main(model_dir, frame_dir, split, no_overlap, save, save_as, evaluate_flag, 
             classes, split_path, frame_dir, config['modality'], config['clip_len'],
             overlap_len=0 if no_overlap else config['clip_len'] // 2,
             crop_dim=config['crop_dim'])
-        print("Length of split_data: ", len(split_data) )
-        print(split_data[1])
         
-        # evaluate(model, split_data, split.upper(), classes, pred_file,
+        # err, f1, pred_events, pred_events_high_recall, pred_scores, avg_mAP = evaluate(model, split_data, split.upper(), classes, pred_file,
         #         calc_stats=False)
+        
+        # print("pred_events: ", pred_events_high_recall)
+        # print("type(pred_events): ", type(pred_events_high_recall))
+        # #save pred_scores as json
+        # with open('output_bas.json', 'w') as f:
+        #     json.dump(pred_scores, f)
 
-    if predict_flag:
+    if inference_flag:
         print("config['clip_len']: ", config['clip_len'])
         split_data = UnlabeledVideoDataset(
             frame_dir, 
@@ -125,23 +130,13 @@ def main(model_dir, frame_dir, split, no_overlap, save, save_as, evaluate_flag, 
         print("Length of split_data: ", len(split_data))
         # print(split_data[1])
 
-        pred_probs = inference(model, split_data, classes)
-        print("pred_probs: ", pred_probs)
-        print("type(pred_probs): ", type(pred_probs))
-        #save pred_probs as json
-        # serialize the data to a JSON formatted string
-        import json
+        pred_events, pred_events_high_recall, pred_scores = inference(model, split_data, classes)
         
-        # convert the dictionary to be JSON serializable
-        pred_probs_list = make_json_serializable(pred_probs)
-
-        # serialize the list to a JSON formatted string
-        json_pred_probs = json.dumps(pred_probs_list)
-
-        # write the JSON data to a file
-        with open('pred_probs.json', 'w') as f:
-            f.write(json_pred_probs)
-            
+        print("pred_events_high_recall: ", pred_events_high_recall)
+        print("type(pred_events_high_recall): ", type(pred_events_high_recall))
+        #save pred_scores as json
+        with open('output.json_224p', 'w') as f:
+            json.dump(pred_scores, f)
 def make_json_serializable(data):
     if isinstance(data, dict):
         return {k: make_json_serializable(v) for k, v in data.items()}
