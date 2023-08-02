@@ -33,7 +33,7 @@ BASE_NUM_WORKERS = 4
 
 BASE_NUM_VAL_EPOCHS = 20
 
-INFERENCE_BATCH_SIZE = 4
+INFERENCE_BATCH_SIZE = 16
 
 # Prevent the GRU params from going too big (cap it at a RegNet-Y 800MF)
 MAX_GRU_HIDDEN_DIM = 768
@@ -368,7 +368,6 @@ def inference(model, dataset, classes):
         if batch_size > 1:
             # Batched by dataloader
             _, batch_pred_scores = model.predict(clip['frame'])
-            print(batch_pred_scores.shape)
 
             for i in range(clip['frame'].shape[0]):
                 video = clip['video'][i]
@@ -401,9 +400,10 @@ def inference(model, dataset, classes):
 
             scores[start:end, :] += np.sum(pred_scores, axis=0)
             support[start:end] += pred_scores.shape[0]
-    # print("pred_dict: ", pred_dict)
-    # print("pred_dict[video]: ", pred_dict[video][0])
-    return pred_dict
+
+    pred_events, pred_events_high_recall, pred_scores = \
+        process_frame_predictions(dataset, classes, pred_dict, inference_only=True)
+    return pred_events, pred_events_high_recall, pred_scores
 
 
 def evaluate(model, dataset, split, classes, save_pred, calc_stats=True,
