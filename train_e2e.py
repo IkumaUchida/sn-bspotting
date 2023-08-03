@@ -33,8 +33,7 @@ BASE_NUM_WORKERS = 4
 
 BASE_NUM_VAL_EPOCHS = 20
 
-INFERENCE_BATCH_SIZE = 4
-
+INFERENCE_BATCH_SIZE = 16
 
 # Prevent the GRU params from going too big (cap it at a RegNet-Y 800MF)
 MAX_GRU_HIDDEN_DIM = 768
@@ -349,6 +348,62 @@ class E2EModel(BaseRGBModel):
             pred = torch.softmax(pred, axis=2)
             pred_cls = torch.argmax(pred, axis=2)
             return pred_cls.cpu().numpy(), pred.cpu().numpy()
+        
+        
+        
+def inference(model, dataset, classes):
+    pred_dict = {}
+    for video, video_len, _ in dataset.videos:
+        pred_dict[video] = (
+            np.zeros((video_len, len(classes) + 1), np.float32),
+            np.zeros(video_len, np.int32))
+
+    # Do not up the batch size if the dataset augments
+    batch_size = 1 if dataset.augment else INFERENCE_BATCH_SIZE
+
+    for clip in tqdm(DataLoader(
+            dataset, num_workers=BASE_NUM_WORKERS * 2, pin_memory=True,
+            batch_size=batch_size
+    )):
+        if batch_size > 1:
+            # Batched by dataloader
+            _, batch_pred_scores = model.predict(clip['frame'])
+
+            for i in range(clip['frame'].shape[0]):
+                video = clip['video'][i]
+                scores, support = pred_dict[video]
+                pred_scores = batch_pred_scores[i]
+                start = clip['start'][i].item()
+                if start < 0:
+                    pred_scores = pred_scores[-start:, :]
+                    start = 0
+                end = start + pred_scores.shape[0]
+                if end >= scores.shape[0]:
+                    end = scores.shape[0]
+                    pred_scores = pred_scores[:end - start, :]
+                scores[start:end, :] += pred_scores
+                support[start:end] += 1
+
+        else:
+            # Batched by dataset
+            scores, support = pred_dict[clip['video'][0]]
+
+            start = clip['start'][0].item()
+            _, pred_scores = model.predict(clip['frame'][0])
+            if start < 0:
+                pred_scores = pred_scores[:, -start:, :]
+                start = 0
+            end = start + pred_scores.shape[1]
+            if end >= scores.shape[0]:
+                end = scores.shape[0]
+                pred_scores = pred_scores[:,:end - start, :]
+
+            scores[start:end, :] += np.sum(pred_scores, axis=0)
+            support[start:end] += pred_scores.shape[0]
+
+    pred_events, pred_events_high_recall, pred_scores = \
+        process_frame_predictions(dataset, classes, pred_dict, inference_only=True)
+    return pred_events, pred_events_high_recall, pred_scores
 
 
 def evaluate(model, dataset, split, classes, save_pred, calc_stats=True,
