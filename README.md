@@ -59,7 +59,7 @@ The predictions are saved as either `pred-{split}.{epoch}.recall.json.gz` or `pr
 
 To create a SoccerNet package for evaluation, use `eval_soccernet_ball.py`
 
-`python eval_soccernet_ball.py <out_dir> -l <video_dir> --eval_dir <out_dir_pred> -s test --nms_window=25`.
+`python eval_soccernet_ball.py <out_dir> -l <video_dir> --eval_dir <out_dir_pred> -s test --nms_window=25`. \
 `python eval_soccernet_ball.py <out_dir> -l <video_dir> --eval_dir <out_dir_pred> -s challenge --nms_window=25`.
 
 * `<out_dir>`: path to the saved directory of a model containing predictions
